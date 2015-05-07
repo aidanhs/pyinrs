@@ -1,0 +1,4 @@
+[package]
+name = "pyinrs"
+version = "0.1.0"
+authors = ["Aidan Hobson Sayers <aidanhs@cantab.net>"]
