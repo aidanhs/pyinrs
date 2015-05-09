@@ -7,7 +7,7 @@ dependencies = [
 
 [[package]]
 name = "libc"
-version = "0.1.6"
+version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
@@ -20,7 +20,7 @@ name = "python27-sys"
 version = "0.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
- "libc 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
+ "libc 0.1.7 (registry+https://github.com/rust-lang/crates.io-index)",
  "pkg-config 0.3.4 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
