@@ -3,5 +3,7 @@ name = "pyinrs"
 version = "0.1.0"
 authors = ["Aidan Hobson Sayers <aidanhs@cantab.net>"]
 
+build = "build.rs"
+
 [dependencies.python27-sys]
 version = "0.0.6"
