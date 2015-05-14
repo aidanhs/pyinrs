@@ -29,10 +29,10 @@ prep:
 clean:
 	cargo clean
 
-dynamic: clean
+dynamic:
 	cargo build $(CARGO_ARGS)
 
-static: clean
+static:
 	cargo build $(CARGO_ARGS) -p python27-sys
 	CMD=$$(cargo rustc -- $(RUSTC_ARGS) --emit obj -Z print-link-args | \
 		tail -n 1 | \

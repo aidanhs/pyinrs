@@ -48,3 +48,6 @@ Hello, python!
 Note that the dynamic build does *not* dynamically link to Python or zlib.
 
 You can do `make OPT=1 <target>` to enable a release build.
+
+Make sure if you alter anything outside of the pyinrs `.rs` files you do a
+`make clean`.
