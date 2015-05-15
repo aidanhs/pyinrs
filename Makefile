@@ -1,5 +1,6 @@
-PKG_CONFIG_PATH=$(shell pwd)/cpython/dist/lib/pkgconfig
-PKG_CONFIG_ALL_STATIC=1
+export PKG_CONFIG_PATH=$(shell pwd)/cpython/dist/lib/pkgconfig
+export PKG_CONFIG_ALL_STATIC=1
+
 OPT ?= 0
 CARGO_ARGS =
 RUSTC_ARGS =
@@ -14,9 +15,9 @@ prep:
 		make libz.a
 	
 	cd cpython && \
-		sed -i 's/^#\(_struct\|operator\|_collections\|_heapq\|itertools\|binascii\) /\1 /' Modules/Setup && \
-		sed -i 's|^# zlib.*$$|zlib zlibmodule.c -I./Modules/zlib -L./Modules/zlib -lz|' Modules/Setup && \
 		./configure --prefix=$$(pwd)/dist --disable-shared && \
+		sed -i 's/^#\(_struct\|operator\|_collections\|_heapq\|itertools\|binascii\) /\1 /' Modules/Setup && \
+		sed -i 's|^#zlib.*$$|zlib zlibmodule.c -I./Modules/zlib -L./Modules/zlib -lz|' Modules/Setup && \
 		make OPT="-fPIC -O2" && \
 		make install
 	
