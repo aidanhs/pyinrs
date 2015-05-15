@@ -2,6 +2,7 @@
 name = "pyinrs"
 version = "0.1.0"
 dependencies = [
+ "libc 0.1.7 (registry+https://github.com/rust-lang/crates.io-index)",
  "python27-sys 0.0.6 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 

@@ -7,3 +7,6 @@ build = "build.rs"
 
 [dependencies.python27-sys]
 version = "0.0.6"
+
+[dependencies.libc]
+version = "0.1.7"
