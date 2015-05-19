@@ -1,18 +1,21 @@
 export PKG_CONFIG_PATH=$(shell pwd)/cpython/dist/lib/pkgconfig
 export PKG_CONFIG_ALL_STATIC=1
 
+default:
+	@echo "Choose one of 'prep', 'static', 'dynamic', 'clean'"
+
 OPT ?= 0
-WRAPLIBC ?= 1
+MODE ?= wrap
 
 CARGO_ARGS =
-RUSTC_ARGS =
+RUSTC_ARGS = --cfg 'feature="$(MODE)"'
 ifeq ($(OPT),1)
 	CARGO_ARGS += --release
 	RUSTC_ARGS += -O
 endif
 
 WRAP_CMD = cat
-ifeq ($(WRAPLIBC),1)
+ifeq ($(MODE),wrap)
 	WRAP_SYMS = read pread pread64 pwrite pwrite64 open open64 lseek lseek64 \
 		stat stat64 __xstat __xstat64 \
 		lstat lstat64 __lxstat __lxstat64 \
@@ -24,6 +27,9 @@ ifeq ($(WRAPLIBC),1)
 		fgetpos fgetpos64 fsetpos fsetpos64 clearerr feof ferror fileno
 	WRAP_CMD = sed 's/"cc"/"cc" $(foreach sym,$(WRAP_SYMS),-Wl,--wrap,$(sym))/'
 endif
+
+checkmode:
+	[ "$(MODE)" = dump -o "$(MODE)" = wrap ]
 
 prep:
 	cd cpython/Modules/zlib && \
@@ -46,7 +52,7 @@ prep:
 clean:
 	cargo clean
 
-dynamic:
+dynamic: checkmode
 	cargo build $(CARGO_ARGS) -p python27-sys
 	CMD=$$(cargo rustc -- $(RUSTC_ARGS) --emit obj -Z print-link-args | \
 		tail -n 1 | \
@@ -55,7 +61,7 @@ dynamic:
 		tr '\n' ' ') && \
 		echo $$CMD && eval "$$CMD"
 
-static:
+static: checkmode
 	cargo build $(CARGO_ARGS) -p python27-sys
 	CMD=$$(cargo rustc -- $(RUSTC_ARGS) --emit obj -Z print-link-args | \
 		tail -n 1 | \

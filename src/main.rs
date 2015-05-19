@@ -13,11 +13,22 @@ use libc::{c_void, c_int, c_long, c_char, size_t, ssize_t, off_t, fpos_t};
 const PYTHONLIB: &'static [u8] = include_bytes!("../libpython2.7.zip");
 const PYTHONLIBTARGET: &'static str = "/tmp/pyinrs-libpython2.7.zip";
 
-fn main() {
+#[cfg(any(feature = "dump", feature = "wrap"))]
+const VALIDMODE: bool = true;
+
+#[cfg(feature = "dump")]
+fn prep() {
     let path = Path::new(PYTHONLIBTARGET);
-    // TODO: make this an option
-    //let mut f = File::create(path).unwrap();
-    //f.write_all(PYTHONLIB).unwrap();
+    let mut f = File::create(path).unwrap();
+    f.write_all(PYTHONLIB).unwrap();
+}
+#[cfg(not(feature = "dump"))]
+fn prep() {}
+
+fn main() {
+    assert!(VALIDMODE);
+
+    prep();
 
     env::set_var("PYTHONPATH", PYTHONLIBTARGET);
     let pyhome_str = "";
