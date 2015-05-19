@@ -8,6 +8,7 @@ OPT ?= 0
 MODE ?= wrap
 
 CARGO_ARGS =
+FEAT = --features "$(MODE)"
 RUSTC_ARGS = --cfg 'feature="$(MODE)"'
 ifeq ($(OPT),1)
 	CARGO_ARGS += --release
@@ -54,7 +55,7 @@ clean:
 
 dynamic: checkmode
 	cargo build $(CARGO_ARGS) -p python27-sys
-	CMD=$$(cargo rustc -- $(RUSTC_ARGS) --emit obj -Z print-link-args | \
+	CMD=$$(cargo rustc $(FEAT) --bin pyinrs -- $(RUSTC_ARGS) --emit obj -Z print-link-args | \
 		tail -n 1 | \
 		tr ' ' '\n' | \
 		$(WRAP_CMD) | \
@@ -63,7 +64,7 @@ dynamic: checkmode
 
 static: checkmode
 	cargo build $(CARGO_ARGS) -p python27-sys
-	CMD=$$(cargo rustc -- $(RUSTC_ARGS) --emit obj -Z print-link-args | \
+	CMD=$$(cargo rustc $(FEAT) --bin pyinrs -- $(RUSTC_ARGS) --emit obj -Z print-link-args | \
 		tail -n 1 | \
 		tr ' ' '\n' | \
 		grep -v '"\(-lpython2\.7\|-pie\|-Wl,.*-whole-archive\|-Wl,-B.*\)"' | \

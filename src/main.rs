@@ -1,17 +1,11 @@
-extern crate libc;
+extern crate pyinrs;
 extern crate python27_sys as py;
-
-#[cfg(feature = "wrap")]
-#[path = "wrap.rs"]
-pub mod backend;
-
-#[cfg(feature = "dump")]
-#[path = "dump.rs"]
-pub mod backend;
 
 use std::ffi::CString;
 use std::ptr;
 use std::env;
+
+use pyinrs::backend;
 
 pub const PYTHONLIB: &'static [u8] = include_bytes!("../libpython2.7.zip");
 pub const PYTHONLIBTARGET: &'static str = "/tmp/pyinrs-libpython2.7.zip";
