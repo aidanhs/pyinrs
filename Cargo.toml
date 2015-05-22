@@ -15,5 +15,14 @@ version = "0.0.6"
 [dependencies.libc]
 version = "0.1.7"
 
+[build-dependencies]
+phf_codegen = "0.7.3"
+glob = "*"
+uuid = "0.1"
+
+[dependencies]
+phf = "0.7.3"
+uuid = "0.1"
+
 [[bin]]
 name = "pyinrs"

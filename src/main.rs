@@ -6,22 +6,10 @@ extern {}
 
 use std::ffi::CString;
 use std::ptr;
-use std::env;
-
-use pyinrs::backend;
-
-pub const PYTHONLIB: &'static [u8] = include_bytes!("../libpython2.7.zip");
-pub const PYTHONLIBTARGET: &'static str = "/tmp/pyinrs-libpython2.7.zip";
-
-#[cfg(any(feature = "dump", feature = "wrap"))]
-const VALIDMODE: bool = true;
 
 fn main() {
-    assert!(VALIDMODE);
+    pyinrs::prep();
 
-    backend::prep();
-
-    env::set_var("PYTHONPATH", PYTHONLIBTARGET);
     let pyhome_str = "";
     let pyhome_cstr = CString::new(pyhome_str.as_bytes()).unwrap();
     let cmd_str = "
