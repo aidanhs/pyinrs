@@ -19,3 +19,8 @@ pub fn prep() {
         }
     }
 }
+
+pub fn atexit() {
+    fs::remove_file(PYTHONLIBTARGET).unwrap();
+    fs::remove_dir_all(FILESTARGET).unwrap();
+}

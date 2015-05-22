@@ -9,6 +9,8 @@ use super::{PYTHONLIB, PYTHONLIBTARGET};
 
 pub fn prep() {}
 
+pub fn atexit() {}
+
 // memfd_create in kernel 3.17
 
 const PYTHONLIB_FD: c_int = 100000;
