@@ -1,3 +1,5 @@
+#![allow(non_snake_case)]
+
 use std::ffi::CStr;
 use std::ptr;
 use libc;
