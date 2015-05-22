@@ -53,8 +53,11 @@ prep:
 clean:
 	cargo clean
 
-dynamic: checkmode
+prebuild:
 	cargo build $(CARGO_ARGS) -p python27-sys
+	rm -f target/*/pyinrs
+
+dynamic: checkmode prebuild
 	CMD=$$(cargo rustc $(FEAT) --bin pyinrs -- $(RUSTC_ARGS) --emit obj -Z print-link-args | \
 		tail -n 1 | \
 		tr ' ' '\n' | \
@@ -62,8 +65,7 @@ dynamic: checkmode
 		tr '\n' ' ') && \
 		echo $$CMD && eval "$$CMD"
 
-static: checkmode
-	cargo build $(CARGO_ARGS) -p python27-sys
+static: checkmode prebuild
 	CMD=$$(cargo rustc $(FEAT) --bin pyinrs -- $(RUSTC_ARGS) --emit obj -Z print-link-args | \
 		tail -n 1 | \
 		tr ' ' '\n' | \
