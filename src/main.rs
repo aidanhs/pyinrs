@@ -1,6 +1,9 @@
 extern crate pyinrs;
 extern crate python27_sys as py;
 
+#[link(name = "z")]
+extern {}
+
 use std::ffi::CString;
 use std::ptr;
 use std::env;
