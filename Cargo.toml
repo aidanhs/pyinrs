@@ -23,6 +23,7 @@ uuid = "0.1"
 [dependencies]
 phf = "0.7.3"
 uuid = "0.1"
+lazy_static = "0.1.*"
 
 [[bin]]
 name = "pyinrs"

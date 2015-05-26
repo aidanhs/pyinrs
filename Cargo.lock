@@ -3,6 +3,7 @@ name = "pyinrs"
 version = "0.1.0"
 dependencies = [
  "glob 0.2.10 (registry+https://github.com/rust-lang/crates.io-index)",
+ "lazy_static 0.1.10 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc 0.1.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "phf 0.7.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "phf_codegen 0.7.3 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -18,6 +19,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 [[package]]
 name = "glob"
 version = "0.2.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[[package]]
+name = "lazy_static"
+version = "0.1.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]

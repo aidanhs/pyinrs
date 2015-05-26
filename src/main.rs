@@ -1,14 +1,25 @@
 extern crate pyinrs;
 extern crate python27_sys as py;
+extern crate uuid;
+#[macro_use]
+extern crate lazy_static;
 
 #[link(name = "z")]
 extern {}
 
 use std::ffi::CString;
 use std::ptr;
+use std::env;
+
+pub const PYTHONLIBNAME: &'static str = "libpython2.7.zip";
+lazy_static!{
+    pub static ref WORKDIR: String =
+        format!("/tmp/pyinrs-{}", uuid::Uuid::new_v4().to_simple_string());
+}
 
 fn main() {
-    pyinrs::prep();
+    pyinrs::prep(&*WORKDIR);
+    env::set_var("PYTHONPATH", format!("{}/{}", &*WORKDIR, PYTHONLIBNAME));
 
     let pyhome_str = "";
     let pyhome_cstr = CString::new(pyhome_str.as_bytes()).unwrap();

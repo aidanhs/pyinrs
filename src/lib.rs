@@ -1,26 +1,26 @@
+#![feature(path_relative_from)]
 #![feature(path_ext)]
 #![feature(std_misc)]
 
 extern crate libc;
 extern crate phf;
+#[macro_use]
+extern crate lazy_static;
 
-use std::env;
 use std::rt;
-
-pub const PYTHONLIB: &'static [u8] = include_bytes!("../libpython2.7.zip");
-pub const PYTHONLIBTARGET: &'static str = "/tmp/pyinrs-libpython2.7.zip";
 
 // Defines static FILES: phf::Map<&'static str, &'static [u8]>
 include!("../include.files");
-pub const FILESTARGET: &'static str = "/tmp/pyinrs-dump";
 
 #[cfg(any(feature = "dump", feature = "wrap"))]
 const VALIDMODE: bool = true;
 
-pub fn prep() {
-    assert!(VALIDMODE);
+static mut WORKDIR: &'static str = "";
 
-    env::set_var("PYTHONPATH", PYTHONLIBTARGET);
+pub fn prep(workdir: &'static str) {
+    assert!(VALIDMODE);
+    unsafe { WORKDIR = workdir };
+
     backend::prep();
     rt::at_exit(backend::atexit).unwrap();
 }
