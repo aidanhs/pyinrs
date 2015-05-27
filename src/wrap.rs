@@ -376,7 +376,10 @@ pub unsafe extern fn __wrap__IO_getc(stream: *mut libc::FILE) -> c_int {
 #[no_mangle]
 pub unsafe extern fn __wrap_ungetc(c: c_int, stream: *mut libc::FILE) -> c_int {
     if INIT() && FS().is_fp(stream) {
-        panic!("ungetc")
+        let (data, _, offset, _) = FS().get_fp_data(stream);
+        assert!(data[offset - 1] == c as u8, "cannot unget mismatched char");
+        FS().set_fp_offset(stream, offset - 1);
+        return c
     }
     __real_ungetc(c, stream)
 }
