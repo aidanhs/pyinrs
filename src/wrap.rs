@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use libc;
 use libc::{c_void, c_int, c_long, c_char, size_t, ssize_t, off_t, fpos_t};
 
-use super::{FILES, WORKDIR};
+use super::{FILES, DIRS, WORKDIR};
 
 static mut IS_INITIALISED: bool = false;
 
@@ -38,9 +38,19 @@ impl FileState {
     fn exists(&self, fpath: &str) -> bool {
         let workdir = unsafe { WORKDIR };
         let path = Path::new(fpath);
-        match path.relative_from(workdir) {
-            Some(relpath) => FILES.get_key(relpath.to_str().unwrap()).is_some(),
-            None => false,
+        let relresult = path.relative_from(workdir);
+        // Not in workdir?
+        if relresult.is_none() {
+            return false
+        }
+        // Filename?
+        let relpath_str = relresult.unwrap().to_str().unwrap();
+        if FILES.get_key(relpath_str).is_some() {
+            true
+        } else if DIRS.contains(relpath_str) {
+            true
+        } else {
+            false
         }
     }
     fn is_fd(&self, fd: c_int) -> bool {
@@ -92,8 +102,16 @@ impl FileState {
         let (path, _) = self.fds[fd as usize - self.base_fd];
         self.stat(path)
     }
+    // TODO: this method does lookups multiple times
     fn stat(&mut self, fpath: &str) -> libc::stat {
-        let (fpath, data) = FILES.get_entry(to_relpath(fpath)).unwrap();
+        let fpath = to_relpath(fpath);
+        let (isfile, isdir, fpath) = if FILES.contains_key(fpath) {
+            (true, false, FILES.get_key(fpath).unwrap())
+        } else if DIRS.contains(fpath) {
+            (false, true, DIRS.get_key(fpath).unwrap())
+        } else {
+            unreachable!()
+        };
         let inode: libc::ino_t = match self.inodes.get(fpath) {
             Some(&inode) => inode,
             None => {
@@ -102,7 +120,7 @@ impl FileState {
                 inode
             },
         };
-        libc::stat {
+        let mut stat = libc::stat {
             st_dev: 100000, // arbitrary
             st_ino: inode,
             st_mode: 0o100444, // normal file, read only
@@ -111,9 +129,9 @@ impl FileState {
             st_gid: 1,
             __pad0: 0, // ???
             st_rdev: 0, // arbitrary
-            st_size: data.len() as ssize_t,
+            st_size: 0,
             st_blksize: 4096,
-            st_blocks: ((data.len() + 1024) / 512) as ssize_t,
+            st_blocks: 0,
             st_atime: 0,
             st_atime_nsec: 0,
             st_mtime: 0,
@@ -121,14 +139,31 @@ impl FileState {
             st_ctime: 0,
             st_ctime_nsec: 0,
             __unused: [0, 0, 0],
+        };
+        if isfile {
+            let data = FILES.get(fpath).unwrap();
+            stat.st_size = data.len() as ssize_t;
+            stat.st_blocks = ((data.len() + 1024) / 512) as ssize_t;
+        } else if isdir {
+            stat.st_mode = 0o040444;
+            stat.st_nlink = 100;
+            stat.st_size = 1024;
+        } else {
+            unreachable!();
         }
+        stat
     }
 }
 
 fn to_relpath(fpath: &str) -> &'static str {
     let workdir = unsafe { WORKDIR };
     let relpath = Path::new(fpath).relative_from(workdir).unwrap().to_str().unwrap();
-    FILES.get_key(relpath).unwrap()
+    let srelpath = FILES.get_key(relpath);
+    if srelpath.is_some() {
+        srelpath.unwrap()
+    } else {
+        DIRS.get_key(relpath).unwrap()
+    }
 }
 
 unsafe fn read_into_ptr(src: &[u8], target_ptr: *mut c_void, offset: usize, count: usize) -> usize {

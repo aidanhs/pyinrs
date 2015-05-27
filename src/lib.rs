@@ -10,6 +10,7 @@ extern crate lazy_static;
 use std::rt;
 
 // Defines static FILES: phf::Map<&'static str, &'static [u8]>
+//         static DIRS:  phf::Set<&'static str>
 include!("../include.files");
 
 #[cfg(any(feature = "dump", feature = "wrap"))]
