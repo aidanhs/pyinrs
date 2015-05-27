@@ -24,9 +24,10 @@ pub fn atexit() {}
 // memfd_create in kernel 3.17
 
 struct FileState {
-    // data, offset, (eof)
+    // path, offset
     fds: Vec<(&'static str, usize)>,
-    fps: Vec<(&'static str, usize, bool)>,
+    // fd, eof
+    fps: Vec<(c_int, bool)>,
     base_fp: usize,
     base_fd: usize,
     // for stat calls
@@ -62,20 +63,21 @@ impl FileState {
         fp >= self.base_fp && fp < self.base_fp + self.fps.len()
     }
 
-    fn get_fp_data(&self, fp: *mut libc::FILE) -> (&'static [u8], usize, bool) {
+    fn get_fp_data(&self, fp: *mut libc::FILE) -> (&'static [u8], c_int, usize, bool) {
         let fp = fp as usize;
-        let (path, offset, eof) = self.fps[fp - self.base_fp];
-        (FILES.get(path).unwrap(), offset, eof)
+        let (fd, eof) = self.fps[fp - self.base_fp];
+        let (data, offset) = self.get_fd_data(fd);
+        (data, fd, offset, eof)
     }
     fn set_fp_offset(&mut self, fp: *mut libc::FILE, offset: usize) {
         let fp = fp as usize;
-        let (path, _, eof) = self.fps[fp - self.base_fp];
-        self.fps[fp - self.base_fp] = (path, offset, eof)
+        let (fd, _) = self.fps[fp - self.base_fp];
+        self.set_fd_offset(fd, offset)
     }
     fn set_fp_eof(&mut self, fp: *mut libc::FILE, eof: bool) {
         let fp = fp as usize;
-        let (path, offset, _) = self.fps[fp - self.base_fp];
-        self.fps[fp - self.base_fp] = (path, offset, eof)
+        let (fd, _) = self.fps[fp - self.base_fp];
+        self.fps[fp - self.base_fp] = (fd, eof)
     }
 
     fn get_fd_data(&self, fd: c_int) -> (&'static [u8], usize) {
@@ -90,7 +92,8 @@ impl FileState {
     }
 
     fn open_as_fp(&mut self, fpath: &str) -> *mut libc::FILE {
-        self.fps.push((FILES.get_key(to_relpath(fpath)).unwrap(), 0, false));
+        let fd = self.open_as_fd(fpath);
+        self.fps.push((fd, false));
         (self.base_fp + self.fps.len() - 1) as *mut libc::FILE
     }
     fn open_as_fd(&mut self, fpath: &str) -> c_int {
@@ -304,7 +307,7 @@ pub unsafe extern fn __wrap_freopen64(path: *const c_char, mode: *const c_char, 
 pub unsafe extern fn __wrap_fread(ptr: *mut c_void, size: size_t, nmemb: size_t, stream: *mut libc::FILE) -> size_t {
     if INIT() && FS().is_fp(stream) {
         // TODO: implement better
-        let (data, offset, _) = FS().get_fp_data(stream);
+        let (data, _, offset, _) = FS().get_fp_data(stream);
         let lenleft = data.len() - offset;
         let wanted = (size * nmemb) as usize;
         let count = if lenleft > wanted { wanted } else { lenleft - (lenleft % size as usize) };
@@ -346,7 +349,7 @@ pub unsafe extern fn __wrap_fgets(s: *mut c_char, size: c_int, stream: *mut libc
 #[no_mangle]
 pub unsafe extern fn __wrap_getc(stream: *mut libc::FILE) -> c_int {
     if INIT() && FS().is_fp(stream) {
-        let (data, offset, _) = FS().get_fp_data(stream);
+        let (data, _, offset, _) = FS().get_fp_data(stream);
         if data.len() == offset {
             return libc::EOF
         }
@@ -359,7 +362,7 @@ pub unsafe extern fn __wrap_getc(stream: *mut libc::FILE) -> c_int {
 #[no_mangle]
 pub unsafe extern fn __wrap__IO_getc(stream: *mut libc::FILE) -> c_int {
     if INIT() && FS().is_fp(stream) {
-        let (data, offset, _) = FS().get_fp_data(stream);
+        let (data, _, offset, _) = FS().get_fp_data(stream);
         if data.len() == offset {
             return libc::EOF
         }
@@ -379,7 +382,7 @@ pub unsafe extern fn __wrap_ungetc(c: c_int, stream: *mut libc::FILE) -> c_int {
 #[no_mangle]
 pub unsafe extern fn __wrap_fseek(stream: *mut libc::FILE, offset: c_long, whence: c_int) -> c_int {
     if INIT() && FS().is_fp(stream) {
-        let (data, cur_offset, _) = FS().get_fp_data(stream);
+        let (data, _, cur_offset, _) = FS().get_fp_data(stream);
         let seek_offset = match whence {
             libc::SEEK_SET => offset,
             libc::SEEK_CUR => cur_offset as off_t + offset,
@@ -410,7 +413,7 @@ pub unsafe extern fn __wrap_fseeko64(stream: *mut libc::FILE, offset: off_t, whe
 #[no_mangle]
 pub unsafe extern fn __wrap_ftell(stream: *mut libc::FILE) -> c_long {
     if INIT() && FS().is_fp(stream) {
-        let (_, offset, _) = FS().get_fp_data(stream);
+        let (_, _, offset, _) = FS().get_fp_data(stream);
         return offset as c_long
     }
     __real_ftell(stream)
@@ -470,7 +473,7 @@ pub unsafe extern fn __wrap_clearerr(stream: *mut libc::FILE) {
 #[no_mangle]
 pub unsafe extern fn __wrap_feof(stream: *mut libc::FILE) -> c_int {
     if INIT() && FS().is_fp(stream) {
-        let (_, _, eof) = FS().get_fp_data(stream);
+        let (_, _, _, eof) = FS().get_fp_data(stream);
         return if eof { 1 } else { 0 }
     }
     __real_feof(stream)
@@ -485,7 +488,8 @@ pub unsafe extern fn __wrap_ferror(stream: *mut libc::FILE) -> c_int {
 #[no_mangle]
 pub unsafe extern fn __wrap_fileno(stream: *mut libc::FILE) -> c_int {
     if INIT() && FS().is_fp(stream) {
-        panic!("fileno")
+        let (_, fd, _, _) = FS().get_fp_data(stream);
+        return fd
     }
     __real_fileno(stream)
 }
