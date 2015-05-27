@@ -95,7 +95,7 @@ impl FileState {
     }
     fn open_as_fd(&mut self, fpath: &str) -> c_int {
         self.fds.push((FILES.get_key(to_relpath(fpath)).unwrap(), 0));
-        (self.base_fp + self.fps.len() - 1) as c_int
+        (self.base_fd + self.fds.len() - 1) as c_int
     }
 
     fn stat_fd(&mut self, fd: c_int) -> libc::stat {
