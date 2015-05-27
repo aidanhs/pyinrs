@@ -102,8 +102,9 @@ impl FileState {
     }
 
     fn stat_fd(&mut self, fd: c_int) -> libc::stat {
+        let workdir = unsafe { WORKDIR };
         let (path, _) = self.fds[fd as usize - self.base_fd];
-        self.stat(path)
+        self.stat(&format!("{}/{}", workdir, path))
     }
     // TODO: this method does lookups multiple times
     fn stat(&mut self, fpath: &str) -> libc::stat {
