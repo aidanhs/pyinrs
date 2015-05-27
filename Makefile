@@ -41,14 +41,14 @@ prep:
 	cd cpython && \
 		./configure --prefix=$$(pwd)/dist --disable-shared && \
 		sed -i 's/^#define \(HAVE_GETC_UNLOCKED\).*/#undef \1/' pyconfig.h && \
-		sed -i 's/^#\(_struct\|operator\|_collections\|_heapq\|itertools\|binascii\) /\1 /' Modules/Setup && \
+		sed -i 's/^#\(array\|cmath\|math\|_struct\|time\|operator\|_random\|_collections\|_heapq\|itertools\|_functools\|datetime\|_io\|fcntl\|select\|_socket\|termios\|resource\|_md5\|_sha\|_sha256\|_sha512\|binascii\|cStringIO\|cPickle\) /\1 /' Modules/Setup && \
 		sed -i 's|^#zlib.*$$|zlib zlibmodule.c -I./Modules/zlib -L./Modules/zlib -lz|' Modules/Setup && \
 		make OPT="-fPIC -O2" && \
 		make install
 	
 	rm -f libpython2.7.zip
 	cd cpython/dist/lib/python2.7 && \
-		LIBFILES=$$(find . '(' -regex './\(distutils\|test\|idlelib\|lib2to3\|unittest\)' -o -regex '.*/tests*/.*' ')' -a -prune -o -name '*.pyo' -print) && \
+		LIBFILES=$$(find . '(' -regex './\(test\|idlelib\|lib2to3\|unittest\)' -o -regex '.*/tests*/.*' ')' -a -prune -o -name '*.pyo' -print) && \
 		for f in $$LIBFILES; do zip $$OLDPWD/libpython2.7.zip $$f; done
 	cd -
 
