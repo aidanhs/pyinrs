@@ -25,7 +25,8 @@ ifeq ($(MODE),wrap)
 		fread fread64 fwrite fwrite64 \
 		fgetc fgets getc _IO_getc ungetc \
 		fseek fseek64 fseeko fseeko64 ftell ftell64 ftello ftello64 rewind \
-		fgetpos fgetpos64 fsetpos fsetpos64 clearerr feof ferror fileno
+		fgetpos fgetpos64 fsetpos fsetpos64 clearerr feof ferror fileno \
+		flockfile ftrylockfile funlockfile
 	WRAP_CMD = sed 's/"cc"/"cc" $(foreach sym,$(WRAP_SYMS),-Wl,--wrap,$(sym))/'
 endif
 
@@ -39,6 +40,7 @@ prep:
 	
 	cd cpython && \
 		./configure --prefix=$$(pwd)/dist --disable-shared && \
+		sed -i 's/^#define \(HAVE_GETC_UNLOCKED\).*/#undef \1/' pyconfig.h && \
 		sed -i 's/^#\(_struct\|operator\|_collections\|_heapq\|itertools\|binascii\) /\1 /' Modules/Setup && \
 		sed -i 's|^#zlib.*$$|zlib zlibmodule.c -I./Modules/zlib -L./Modules/zlib -lz|' Modules/Setup && \
 		make OPT="-fPIC -O2" && \

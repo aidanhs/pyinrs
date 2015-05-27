@@ -235,6 +235,9 @@ extern {
     fn __real_feof(stream: *mut libc::FILE) -> c_int;
     fn __real_ferror(stream: *mut libc::FILE) -> c_int;
     fn __real_fileno(stream: *mut libc::FILE) -> c_int;
+    fn __real_flockfile(stream: *mut libc::FILE);
+    fn __real_ftrylockfile(stream: *mut libc::FILE) -> c_int;
+    fn __real_funlockfile(stream: *mut libc::FILE);
 
     fn __real_dup(oldfd: c_int) -> c_int;
     fn __real_dup2(oldfd: c_int, newfd: c_int) -> c_int;
@@ -496,6 +499,27 @@ pub unsafe extern fn __wrap_fileno(stream: *mut libc::FILE) -> c_int {
         return fd
     }
     __real_fileno(stream)
+}
+#[no_mangle]
+pub unsafe extern fn __wrap_flockfile(stream: *mut libc::FILE) {
+    if INIT() && FS().is_fp(stream) {
+        panic!("flockfile");
+    }
+    __real_flockfile(stream)
+}
+#[no_mangle]
+pub unsafe extern fn __wrap_ftrylockfile(stream: *mut libc::FILE) -> c_int {
+    if INIT() && FS().is_fp(stream) {
+        panic!("ftrylockfile");
+    }
+    __real_ftrylockfile(stream)
+}
+#[no_mangle]
+pub unsafe extern fn __wrap_funlockfile(stream: *mut libc::FILE) {
+    if INIT() && FS().is_fp(stream) {
+        panic!("funlockfile");
+    }
+    __real_funlockfile(stream)
 }
 
 
