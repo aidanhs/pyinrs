@@ -16,6 +16,8 @@ static mut IS_INITIALISED: bool = false;
 
 // Missing defines from libc crate
 const AT_FDCWD: c_int = -100;
+#[allow(dead_code)]
+#[allow(non_camel_case_types)]
 struct dirent {
     d_ino: libc::ino_t,
     d_off: off_t,

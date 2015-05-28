@@ -1,5 +1,4 @@
 #![feature(path_relative_from)]
-#![feature(path_ext)]
 #![feature(std_misc)]
 
 extern crate libc;
