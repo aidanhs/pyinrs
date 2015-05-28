@@ -45,7 +45,7 @@ prep:
 	cd cpython && \
 		./configure --prefix=$$(pwd)/dist --disable-shared && \
 		sed -i 's/^#define \(HAVE_GETC_UNLOCKED\).*/#undef \1/' pyconfig.h && \
-		sed -i 's/^#\(array\|cmath\|math\|_struct\|time\|operator\|_random\|_collections\|_heapq\|itertools\|_functools\|datetime\|_io\|fcntl\|select\|_socket\|termios\|resource\|_md5\|_sha\|_sha256\|_sha512\|binascii\|cStringIO\|cPickle\) /\1 /' Modules/Setup && \
+		sed -i 's/^#\(array\|cmath\|math\|_struct\|time\|operator\|_random\|_collections\|_heapq\|itertools\|_functools\|datetime\|unicodedata\|_io\|fcntl\|select\|_socket\|termios\|resource\|_md5\|_sha\|_sha256\|_sha512\|binascii\|cStringIO\|cPickle\) /\1 /' Modules/Setup && \
 		sed -i 's|^#zlib.*$$|zlib zlibmodule.c -I./Modules/zlib -L./Modules/zlib -lz|' Modules/Setup && \
 		make OPT="-fPIC -O2" && \
 		make install
