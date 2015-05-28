@@ -17,10 +17,14 @@ endif
 
 WRAP_CMD = cat
 ifeq ($(MODE),wrap)
-	WRAP_SYMS = read pread pread64 pwrite pwrite64 open open64 lseek lseek64 \
+	WRAP_SYMS = \
+		read pread pread64 pwrite pwrite64 open open64 openat openat64 \
+		creat creat64 lseek lseek64 \
 		stat stat64 __xstat __xstat64 \
 		lstat lstat64 __lxstat __lxstat64 \
 		fstat fstat64 __fxstat __fxstat64 \
+		opendir fdopendir closedir readdir readdir64 readdir_r readdir_r64 \
+		rewinddir seekdir telldir \
 		fclose fopen fopen64 fdopen fdopen64 freopen freopen64 \
 		fread fread64 fwrite fwrite64 \
 		fgetc fgets getc _IO_getc ungetc \

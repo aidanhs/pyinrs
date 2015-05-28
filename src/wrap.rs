@@ -1,10 +1,11 @@
 #![allow(non_snake_case)]
 
-use std::ffi::CStr;
+use std::ffi::{CStr, CString};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::ptr;
 use std::str;
-use std::path::Path;
+use std::env;
+use std::path::{Path, PathBuf};
 use std::collections::HashMap;
 use libc;
 use libc::{c_void, c_int, c_long, c_char, size_t, ssize_t, off_t, fpos_t};
@@ -12,6 +13,16 @@ use libc::{c_void, c_int, c_long, c_char, size_t, ssize_t, off_t, fpos_t};
 use super::{FILES, DIRS, WORKDIR};
 
 static mut IS_INITIALISED: bool = false;
+
+// Missing defines from libc crate
+const AT_FDCWD: c_int = -100;
+struct dirent {
+    d_ino: libc::ino_t,
+    d_off: off_t,
+    d_reclen: libc::c_ushort,
+    d_type: libc::c_uchar,
+    d_name: [c_char; 256],
+}
 
 pub fn prep() {
     // Make sure FS is initialised
@@ -30,6 +41,9 @@ struct FileState {
     fps: Vec<(c_int, bool)>,
     base_fp: usize,
     base_fd: usize,
+    // for storing memory for dirent calls
+    // next_offset, cur_dirent
+    dirents: Vec<(usize, dirent)>,
     // for stat calls
     inodes: HashMap<&'static str, libc::ino_t>,
     base_inode: usize,
@@ -80,6 +94,11 @@ impl FileState {
         self.fps[fp - self.base_fp] = (fd, eof)
     }
 
+    fn get_fd_path(&self, fd: c_int) -> &'static str {
+        let fd = fd as usize;
+        let (path, _) = self.fds[fd - self.base_fd];
+        path
+    }
     fn get_fd_data(&self, fd: c_int) -> (&'static [u8], usize) {
         let fd = fd as usize;
         let (path, offset) = self.fds[fd - self.base_fd];
@@ -97,8 +116,24 @@ impl FileState {
         (self.base_fp + self.fps.len() - 1) as *mut libc::FILE
     }
     fn open_as_fd(&mut self, fpath: &str) -> c_int {
-        self.fds.push((FILES.get_key(to_relpath(fpath)).unwrap(), 0));
+        let relpath = to_relpath(fpath);
+        let path = match FILES.get_key(relpath) {
+            Some(fpath) => fpath,
+            None => DIRS.get_key(relpath).unwrap(),
+        };
+        self.fds.push((path, 0));
         (self.base_fd + self.fds.len() - 1) as c_int
+    }
+
+    fn get_inode(&mut self, fpath: &'static str) -> libc::ino_t {
+        match self.inodes.get(fpath) {
+            Some(&inode) => inode,
+            None => {
+                let inode = (self.inodes.len() + self.base_inode) as libc::ino_t;
+                self.inodes.insert(fpath, inode);
+                inode
+            },
+        }
     }
 
     fn stat_fd(&mut self, fd: c_int) -> libc::stat {
@@ -116,17 +151,9 @@ impl FileState {
         } else {
             unreachable!()
         };
-        let inode: libc::ino_t = match self.inodes.get(fpath) {
-            Some(&inode) => inode,
-            None => {
-                let inode = (self.inodes.len() + self.base_inode) as libc::ino_t;
-                self.inodes.insert(fpath, inode);
-                inode
-            },
-        };
         let mut stat = libc::stat {
             st_dev: 100000, // arbitrary
-            st_ino: inode,
+            st_ino: self.get_inode(fpath),
             st_mode: 0o100444, // normal file, read only
             st_nlink: 1,
             st_uid: 1,
@@ -157,6 +184,53 @@ impl FileState {
         }
         stat
     }
+
+    fn seek_dirent(&mut self, dirp: *mut libc::DIR, loc: libc::c_long) {
+        let diro = dirp as usize - self.base_fp;
+        self.dirents[diro].0 = loc as usize
+    }
+    fn next_dirent(&mut self, dirp: *mut libc::DIR) -> *mut dirent {
+        let diro = dirp as usize - self.base_fp;
+        while self.dirents.len() <= diro {
+            self.dirents.push((0, dirent {
+                d_ino: 0, d_off: 0, d_reclen: 0,
+                d_type: 0 as libc::c_uchar, d_name: [0; 256],
+            }));
+        }
+
+        let (dirent_off, _) = self.dirents[diro];
+        let (fd, _) = self.fps[diro];
+        let dpath_str = self.get_fd_path(fd);
+        let dpath = Path::new(dpath_str);
+        let mut dirent_count = 0;
+        for &subpath_str in DIRS.iter().chain(FILES.keys()) {
+            let subpath = Path::new(subpath_str);
+            match subpath.parent() {
+                Some(parentpath) => if parentpath != dpath { continue },
+                None => continue,
+            }
+            if dirent_off != dirent_count {
+                dirent_count += 1;
+                continue
+            }
+            //println!("a{}", fpath_str);
+            let fpath_str: &str = subpath.file_name().unwrap().to_str().unwrap();
+            let fpath_len = fpath_str.len();
+            assert!(fpath_len <= 256);
+            let mut de = dirent {
+                d_ino: self.get_inode(fpath_str),
+                d_off: dirent_off as c_long,
+                d_reclen: fpath_len as libc::c_ushort,
+                d_type: 0 as libc::c_uchar,
+                d_name: [0; 256],
+            };
+            let cbytes = CString::new(fpath_str).unwrap().as_ptr();
+            unsafe { ptr::copy(cbytes, de.d_name.as_mut_ptr(), fpath_len) };
+            self.dirents[diro] = (dirent_off + 1, de);
+            return (&mut self.dirents[diro].1) as *mut dirent
+        }
+        ptr::null_mut()
+    }
 }
 
 fn to_relpath(fpath: &str) -> &'static str {
@@ -186,6 +260,7 @@ lazy_static!{
         fps: vec![],
         base_fp: 1,
         base_fd: 100000,
+        dirents: vec![],
         inodes: HashMap::new(),
         base_inode: 0,
     }));
@@ -239,12 +314,27 @@ extern {
     fn __real_ftrylockfile(stream: *mut libc::FILE) -> c_int;
     fn __real_funlockfile(stream: *mut libc::FILE);
 
+    fn __real_opendir(name: *const c_char) -> *mut libc::DIR;
+    fn __real_fdopendir(fd: c_int) -> *mut libc::DIR;
+    fn __real_closedir(dirp: *mut libc::DIR) -> c_int;
+    fn __real_readdir(dirp: *mut libc::DIR) -> *mut libc::dirent_t;
+    fn __real_readdir64(dirp: *mut libc::DIR) -> *mut libc::dirent_t;
+    fn __real_readdir_r(dirp: *mut libc::DIR, entry: *mut libc::DIR, result: *mut *mut libc::DIR) -> c_int;
+    fn __real_readdir_r64(dirp: *mut libc::DIR, entry: *mut libc::DIR, result: *mut *mut libc::DIR) -> c_int;
+    fn __real_rewinddir(dirp: *mut libc::DIR);
+    fn __real_seekdir(dirp: *mut libc::DIR, loc: c_long);
+    fn __real_telldir(dirp: *mut libc::DIR) -> c_long;
+
     fn __real_dup(oldfd: c_int) -> c_int;
     fn __real_dup2(oldfd: c_int, newfd: c_int) -> c_int;
     fn __real_dup3(oldfd: c_int, newfd: c_int, flags: c_int) -> c_int;
     fn __real_read(fd: c_int, buf: *mut c_void, count: size_t) -> ssize_t;
     fn __real_open(pathname: *const c_char, flags: c_int, mode: libc::mode_t) -> c_int;
     fn __real_open64(pathname: *const c_char, flags: c_int, mode: libc::mode_t) -> c_int;
+    fn __real_openat(dirfd: c_int, pathname: *const c_char, flags: c_int, mode: libc::mode_t) -> c_int;
+    fn __real_openat64(dirfd: c_int, pathname: *const c_char, flags: c_int, mode: libc::mode_t) -> c_int;
+    fn __real_creat(pathname: *const c_char, mode: libc::mode_t) -> c_int;
+    fn __real_creat64(pathname: *const c_char, mode: libc::mode_t) -> c_int;
     fn __real_pread(fd: c_int, buf: *mut c_void, count: size_t, offset: off_t) -> ssize_t;
     fn __real_pread64(fd: c_int, buf: *mut c_void, count: size_t, offset: off_t) -> ssize_t;
     fn __real_pwrite(fd: c_int, buf: *const c_void, count: size_t, offset: off_t) -> ssize_t;
@@ -525,6 +615,87 @@ pub unsafe extern fn __wrap_funlockfile(stream: *mut libc::FILE) {
 
 
 #[no_mangle]
+pub unsafe extern fn __wrap_opendir(name: *const c_char) -> *mut libc::DIR {
+    let str_path = str::from_utf8(CStr::from_ptr(name).to_bytes()).unwrap();
+    let path = Path::new(str_path);
+    let cur_path = env::current_dir().unwrap();
+    let abs_path = cur_path.join(path);
+    let abs_path_str = abs_path.to_str().unwrap();
+    if INIT() && FS().exists(abs_path_str) {
+        let ret = FS().open_as_fp(abs_path_str) as *mut libc::DIR;
+        return ret
+    }
+    __real_opendir(name)
+}
+#[no_mangle]
+pub unsafe extern fn __wrap_fdopendir(fd: c_int) -> *mut libc::DIR {
+    if INIT() && FS().is_fd(fd) {
+        panic!("fdopendir");
+    }
+    __real_fdopendir(fd)
+}
+#[no_mangle]
+pub unsafe extern fn __wrap_closedir(dirp: *mut libc::DIR) -> c_int {
+    let fp = dirp as *mut libc::FILE;
+    if INIT() && FS().is_fp(fp) {
+        __wrap_seekdir(dirp, 0);
+        return 0
+    }
+    __real_closedir(dirp)
+}
+#[no_mangle]
+pub unsafe extern fn __wrap_readdir(dirp: *mut libc::DIR) -> *mut libc::dirent_t {
+    let fp = dirp as *mut libc::FILE;
+    if INIT() && FS().is_fp(fp) {
+        return FS().next_dirent(dirp) as *mut libc::dirent_t
+    }
+    __real_readdir(dirp)
+}
+#[no_mangle]
+pub unsafe extern fn __wrap_readdir64(dirp: *mut libc::DIR) -> *mut libc::dirent_t {
+    __wrap_readdir(dirp)
+}
+#[no_mangle]
+pub unsafe extern fn __wrap_readdir_r(dirp: *mut libc::DIR, entry: *mut libc::DIR, result: *mut *mut libc::DIR) -> c_int {
+    let fp = dirp as *mut libc::FILE;
+    if INIT() && FS().is_fp(fp) {
+        panic!("readdir_r");
+    }
+    __real_readdir_r(dirp, entry, result)
+}
+#[no_mangle]
+pub unsafe extern fn __wrap_readdir_r64(dirp: *mut libc::DIR, entry: *mut libc::DIR, result: *mut *mut libc::DIR) -> c_int {
+    __wrap_readdir_r(dirp, entry, result)
+}
+#[no_mangle]
+pub unsafe extern fn __wrap_rewinddir(dirp: *mut libc::DIR) {
+    let fp = dirp as *mut libc::FILE;
+    if INIT() && FS().is_fp(fp) {
+        panic!("rewinddir");
+    }
+    __real_rewinddir(dirp)
+}
+#[no_mangle]
+pub unsafe extern fn __wrap_seekdir(dirp: *mut libc::DIR, loc: c_long) {
+    let fp = dirp as *mut libc::FILE;
+    if INIT() && FS().is_fp(fp) {
+        FS().seek_dirent(dirp, loc);
+        return
+    }
+    __real_seekdir(dirp, loc)
+}
+#[no_mangle]
+pub unsafe extern fn __wrap_telldir(dirp: *mut libc::DIR) -> c_long {
+    let fp = dirp as *mut libc::FILE;
+    if INIT() && FS().is_fp(fp) {
+        panic!("telldir");
+    }
+    __real_telldir(dirp)
+}
+
+
+
+#[no_mangle]
 pub unsafe extern fn __wrap_dup(oldfd: c_int) -> c_int {
     if INIT() && FS().is_fd(oldfd) { panic!("dup") }
     __real_dup(oldfd)
@@ -542,7 +713,18 @@ pub unsafe extern fn __wrap_dup3(oldfd: c_int, newfd: c_int, flags: c_int) -> c_
 #[no_mangle]
 pub unsafe extern fn __wrap_open(pathname: *const c_char, flags: c_int, mode: libc::mode_t) -> c_int {
     let str_path = str::from_utf8(CStr::from_ptr(pathname).to_bytes()).unwrap();
-    if INIT() && FS().exists(str_path) {
+    let path = Path::new(str_path);
+    let cur_path = env::current_dir().unwrap();
+    let abs_path = cur_path.join(path);
+    let abs_path_str = abs_path.to_str().unwrap();
+    if INIT() && FS().exists(abs_path_str) {
+        let allowed = 0 as c_int;
+        if flags | allowed != allowed {
+            panic!("open: invalid flag {}", flags);
+        }
+        if mode as c_int != libc::O_RDONLY {
+            panic!("open: invalid mode {}", mode);
+        }
         // This violates the spec by not returning the lowest numbered
         // unused fd
         return FS().open_as_fd(str_path)
@@ -552,6 +734,49 @@ pub unsafe extern fn __wrap_open(pathname: *const c_char, flags: c_int, mode: li
 #[no_mangle]
 pub unsafe extern fn __wrap_open64(pathname: *const c_char, flags: c_int, mode: libc::mode_t) -> c_int {
     __wrap_open(pathname, flags, mode)
+}
+#[no_mangle]
+pub unsafe extern fn __wrap_openat(dirfd: c_int, pathname: *const c_char, flags: c_int, mode: libc::mode_t) -> c_int {
+    let str_path = str::from_utf8(CStr::from_ptr(pathname).to_bytes()).unwrap();
+    let path = Path::new(str_path);
+    let mut abs_path = PathBuf::new();
+    let isvirt = if !INIT() {
+        false
+    } else if path.is_absolute() {
+        abs_path.push(path);
+        FS().exists(str_path)
+    } else if dirfd != AT_FDCWD && !FS().is_fd(dirfd) {
+        false
+    } else {
+        let prefixpath = match dirfd {
+            AT_FDCWD => env::current_dir().unwrap(),
+            dfd => PathBuf::from(FS().get_fd_path(dfd)),
+        };
+        let path = prefixpath.join(path);
+        abs_path.push(&path);
+        FS().exists(path.to_str().unwrap())
+    };
+    if isvirt {
+        let abs_str_path = abs_path.to_str().unwrap();
+        return __wrap_open(CString::new(abs_str_path).unwrap().as_ptr(), flags, mode)
+    }
+    __real_openat(dirfd, pathname, flags, mode)
+}
+#[no_mangle]
+pub unsafe extern fn __wrap_openat64(dirfd: c_int, pathname: *const c_char, flags: c_int, mode: libc::mode_t) -> c_int {
+    __wrap_openat(dirfd, pathname, flags, mode)
+}
+#[no_mangle]
+pub unsafe extern fn __wrap_creat(pathname: *const c_char, mode: libc::mode_t) -> c_int {
+    let str_path = str::from_utf8(CStr::from_ptr(pathname).to_bytes()).unwrap();
+    let path = Path::new(str_path);
+    if path.starts_with(Path::new(WORKDIR)) {
+        panic!("creat");
+    }
+    __real_creat(pathname, mode)
+}
+pub unsafe extern fn __wrap_creat64(pathname: *const c_char, mode: libc::mode_t) -> c_int {
+    __wrap_creat(pathname, mode)
 }
 #[no_mangle]
 pub unsafe extern fn __wrap_read(fd: c_int, buf: *mut c_void, count: size_t) -> ssize_t {
