@@ -1,5 +1,6 @@
 #![feature(path_relative_from)]
 #![feature(std_misc)]
+#![feature(collections)]
 
 extern crate libc;
 extern crate phf;

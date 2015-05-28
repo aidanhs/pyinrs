@@ -289,7 +289,7 @@ extern {
     fn __real_fwrite(ptr: *const c_void, size: size_t, nmemb: size_t, stream: *mut libc::FILE) -> size_t;
     fn __real_fwrite64(ptr: *const c_void, size: size_t, nmemb: size_t, stream: *mut libc::FILE) -> size_t;
     fn __real_fgetc(stream: *mut libc::FILE) -> c_int;
-    fn __real_fgets(s: *mut c_char, size: c_int, stream: *mut libc::FILE) -> c_int;
+    fn __real_fgets(s: *mut c_char, size: c_int, stream: *mut libc::FILE) -> *mut libc::c_char;
     fn __real_getc(stream: *mut libc::FILE) -> c_int;
     fn __real__IO_getc(stream: *mut libc::FILE) -> c_int;
     // getchar - stdin only
@@ -436,9 +436,25 @@ pub unsafe extern fn __wrap_fgetc(stream: *mut libc::FILE) -> c_int {
     __real_fgetc(stream)
 }
 #[no_mangle]
-pub unsafe extern fn __wrap_fgets(s: *mut c_char, size: c_int, stream: *mut libc::FILE) -> c_int {
+pub unsafe extern fn __wrap_fgets(s: *mut c_char, size: c_int, stream: *mut libc::FILE) -> *mut libc::c_char {
     if INIT() && FS().is_fp(stream) {
-        panic!("fgets")
+        let size = size as usize;
+        let (data, _, offset, _) = FS().get_fp_data(stream);
+        let size = if size + offset > data.len() { data.len() - offset } else { size };
+        let slice = &data[offset..offset+size];
+        let numtaken = match slice.position_elem(&('\n' as u8)) {
+            Some(numtaken) => numtaken + 1,
+            None => size,
+        };
+        ptr::copy(data[offset..].as_ptr() as *mut u8, s as *mut u8, numtaken);
+        let nul: &[u8] = &[0];
+        ptr::copy(nul.as_ptr(), (s as usize + numtaken) as *mut u8, 1);
+        let newoffset = offset + numtaken;
+        if newoffset == data.len() {
+            FS().set_fp_eof(stream, true)
+        }
+        FS().set_fp_offset(stream, newoffset);
+        return if numtaken == 0 { ptr::null_mut() } else { s }
     }
     __real_fgets(s, size, stream)
 }
