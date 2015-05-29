@@ -383,6 +383,8 @@ extern {
     fn __real_fstat64(fd: c_int, buf: *mut libc::stat) -> c_int;
     fn __real___fxstat(ver: c_int, fd: c_int, buf: *mut libc::stat) -> c_int;
     fn __real___fxstat64(ver: c_int, fd: c_int, buf: *mut libc::stat) -> c_int;
+    fn __real_access(pathname: *const c_char, mode: c_int) -> c_int;
+
     fn __real_chdir(path: *const c_char) -> c_int;
     fn __real_fchdir(fd: c_int) -> c_int;
     fn __real_getcwd(buf: *mut c_char, size: size_t) -> *mut c_char;
@@ -955,6 +957,20 @@ pub unsafe extern fn __wrap___fxstat(ver: c_int, fd: c_int, buf: *mut libc::stat
 #[no_mangle]
 pub unsafe extern fn __wrap___fxstat64(ver: c_int, fd: c_int, buf: *mut libc::stat) -> c_int {
     __wrap___fxstat(ver, fd, buf)
+}
+#[no_mangle]
+pub unsafe extern fn __wrap_access(pathname: *const c_char, mode: c_int) -> c_int {
+    let str_path = str::from_utf8(CStr::from_ptr(pathname).to_bytes()).unwrap();
+    if INIT() && FS().exists(str_path) {
+        if mode == libc::F_OK {
+            return 0
+        }
+        if mode | libc::R_OK | libc::X_OK == libc::R_OK | libc::X_OK {
+            return 0
+        }
+        // deliberate fall-through to access denied
+    }
+    __real_access(pathname, mode)
 }
 
 #[no_mangle]
