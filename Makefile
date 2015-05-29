@@ -12,7 +12,7 @@ FEAT = --features "$(MODE)"
 RUSTC_ARGS = --cfg 'feature="$(MODE)"'
 ifeq ($(OPT),1)
 	CARGO_ARGS += --release
-	RUSTC_ARGS += -O
+	RUSTC_ARGS += -C opt-level=3
 endif
 
 WRAP_CMD = cat
@@ -62,11 +62,11 @@ clean:
 	cargo clean
 
 prebuild:
-	cargo build $(CARGO_ARGS) -p python27-sys
+	cargo fetch
 	rm -f target/*/pyinrs
 
 dynamic: checkmode prebuild
-	CMD=$$(cargo rustc $(FEAT) --bin pyinrs -- $(RUSTC_ARGS) --emit obj -Z print-link-args | \
+	CMD=$$(cargo rustc $(CARGO_ARGS) $(FEAT) --bin pyinrs -- $(RUSTC_ARGS) --emit obj -Z print-link-args | \
 		tail -n 1 | \
 		tr ' ' '\n' | \
 		$(WRAP_CMD) | \
@@ -74,7 +74,7 @@ dynamic: checkmode prebuild
 		echo $$CMD && eval "$$CMD"
 
 static: checkmode prebuild
-	CMD=$$(cargo rustc $(FEAT) --bin pyinrs -- $(RUSTC_ARGS) --emit obj -Z print-link-args | \
+	CMD=$$(cargo rustc $(CARGO_ARGS) $(FEAT) --bin pyinrs -- $(RUSTC_ARGS) --emit obj -Z print-link-args | \
 		tail -n 1 | \
 		sed 's/"-l" "python2\.7" //g' | \
 		tr ' ' '\n' | \
