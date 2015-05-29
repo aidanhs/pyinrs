@@ -76,9 +76,10 @@ dynamic: checkmode prebuild
 static: checkmode prebuild
 	CMD=$$(cargo rustc $(FEAT) --bin pyinrs -- $(RUSTC_ARGS) --emit obj -Z print-link-args | \
 		tail -n 1 | \
+		sed 's/"-l" "python2\.7" //g' | \
 		tr ' ' '\n' | \
-		grep -v '"\(-lpython2\.7\|-pie\|-Wl,.*-whole-archive\|-Wl,-B.*\)"' | \
-		sed 's/"-lgcc_s"/"-lgcc_eh"/' | \
+		grep -v '"\(-pie\|-Wl,.*-whole-archive\|-Wl,-B.*\)"' | \
+		sed 's/gcc_s"/gcc_eh"/' | \
 		sed 's/"cc"/"cc" "-static"/' | \
 		$(WRAP_CMD) | \
 		tr '\n' ' ') && \
