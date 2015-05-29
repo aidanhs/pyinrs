@@ -55,7 +55,8 @@ struct FileState {
 impl FileState {
     fn exists(&self, fpath: &str) -> bool {
         let workdir = unsafe { WORKDIR };
-        let path = Path::new(fpath);
+        let mut path = self.actual_cwd_path();
+        path.push(Path::new(fpath));
         let relresult = path.relative_from(workdir);
         // Not in workdir?
         if relresult.is_none() {
@@ -119,7 +120,7 @@ impl FileState {
         (self.base_fp + self.fps.len() - 1) as *mut libc::FILE
     }
     fn open_as_fd(&mut self, fpath: &str) -> c_int {
-        let relpath = to_relpath(fpath);
+        let relpath = self.to_relpath(fpath);
         let path = match FILES.get_key(relpath) {
             Some(fpath) => fpath,
             None => DIRS.get_key(relpath).unwrap(),
@@ -146,7 +147,7 @@ impl FileState {
     }
     // TODO: this method does lookups multiple times
     fn stat(&mut self, fpath: &str) -> libc::stat {
-        let fpath = to_relpath(fpath);
+        let fpath = self.to_relpath(fpath);
         let (isfile, isdir, fpath) = if FILES.contains_key(fpath) {
             (true, false, FILES.get_key(fpath).unwrap())
         } else if DIRS.contains(fpath) {
@@ -157,7 +158,7 @@ impl FileState {
         let mut stat = libc::stat {
             st_dev: 100000, // arbitrary
             st_ino: self.get_inode(fpath),
-            st_mode: 0o100444, // normal file, read only
+            st_mode: 0o100555, // normal file, read only
             st_nlink: 1,
             st_uid: 1,
             st_gid: 1,
@@ -179,7 +180,7 @@ impl FileState {
             stat.st_size = data.len() as ssize_t;
             stat.st_blocks = ((data.len() + 1024) / 512) as ssize_t;
         } else if isdir {
-            stat.st_mode = 0o040444;
+            stat.st_mode = 0o040555; // directory, r+x
             stat.st_nlink = 100;
             stat.st_size = 1024;
         } else {
@@ -216,7 +217,6 @@ impl FileState {
                 dirent_count += 1;
                 continue
             }
-            //println!("a{}", fpath_str);
             let fpath_str: &str = subpath.file_name().unwrap().to_str().unwrap();
             let fpath_len = fpath_str.len();
             assert!(fpath_len <= 256);
@@ -236,7 +236,7 @@ impl FileState {
     }
 
     fn set_cwd(&mut self, dir: &str) {
-        self.cwd = Some(to_relpath(dir))
+        self.cwd = Some(self.to_relpath(dir))
     }
     fn unset_cwd(&mut self) {
         self.cwd = None
@@ -250,19 +250,26 @@ impl FileState {
     fn actual_cwd_path(&self) -> PathBuf {
         match self.cwd {
             Some(pathstr) => PathBuf::from(pathstr),
-            None => env::current_dir().unwrap(),
+            None => {
+                // cannot use env::current_dir().unwrap() because deadlock
+                let cwd_ptr = unsafe { __real_get_current_dir_name() };
+                let cwd_cstr = unsafe { CStr::from_ptr(cwd_ptr) };
+                PathBuf::from(cwd_cstr.to_str().unwrap())
+            }
         }
     }
-}
 
-fn to_relpath(fpath: &str) -> &'static str {
-    let workdir = unsafe { WORKDIR };
-    let relpath = Path::new(fpath).relative_from(workdir).unwrap().to_str().unwrap();
-    let srelpath = FILES.get_key(relpath);
-    if srelpath.is_some() {
-        srelpath.unwrap()
-    } else {
-        DIRS.get_key(relpath).unwrap()
+    fn to_relpath(&self, fpath: &str) -> &'static str {
+        let workdir = unsafe { WORKDIR };
+        let mut path = self.actual_cwd_path();
+        path.push(Path::new(fpath));
+        let relpath = path.relative_from(workdir).unwrap().to_str().unwrap();
+        let srelpath = FILES.get_key(relpath);
+        if srelpath.is_some() {
+            srelpath.unwrap()
+        } else {
+            DIRS.get_key(relpath).unwrap()
+        }
     }
 }
 
