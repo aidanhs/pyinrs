@@ -23,6 +23,7 @@ ifeq ($(MODE),wrap)
 		stat stat64 __xstat __xstat64 \
 		lstat lstat64 __lxstat __lxstat64 \
 		fstat fstat64 __fxstat __fxstat64 \
+		chdir fchdir getcwd getwd get_current_dir_name \
 		opendir fdopendir closedir readdir readdir64 readdir_r readdir_r64 \
 		rewinddir seekdir telldir \
 		fclose fopen fopen64 fdopen fdopen64 freopen freopen64 \

@@ -37,6 +37,7 @@ pub fn atexit() {}
 // memfd_create in kernel 3.17
 
 struct FileState {
+    cwd: Option<&'static str>,
     // path, offset
     fds: Vec<(&'static str, usize)>,
     // fd, eof
@@ -233,6 +234,25 @@ impl FileState {
         }
         ptr::null_mut()
     }
+
+    fn set_cwd(&mut self, dir: &str) {
+        self.cwd = Some(to_relpath(dir))
+    }
+    fn unset_cwd(&mut self) {
+        self.cwd = None
+    }
+    fn has_cwd(&self) -> bool {
+        self.cwd.is_some()
+    }
+    fn get_cwd(&self) -> Option<&'static str> {
+        self.cwd
+    }
+    fn actual_cwd_path(&self) -> PathBuf {
+        match self.cwd {
+            Some(pathstr) => PathBuf::from(pathstr),
+            None => env::current_dir().unwrap(),
+        }
+    }
 }
 
 fn to_relpath(fpath: &str) -> &'static str {
@@ -258,6 +278,7 @@ unsafe fn read_into_ptr(src: &[u8], target_ptr: *mut c_void, offset: usize, coun
 
 lazy_static!{
     static ref FILE_STATE: Arc<Mutex<FileState>> = Arc::new(Mutex::new(FileState {
+        cwd: None,
         fds: vec![],
         fps: vec![],
         base_fp: 1,
@@ -355,6 +376,11 @@ extern {
     fn __real_fstat64(fd: c_int, buf: *mut libc::stat) -> c_int;
     fn __real___fxstat(ver: c_int, fd: c_int, buf: *mut libc::stat) -> c_int;
     fn __real___fxstat64(ver: c_int, fd: c_int, buf: *mut libc::stat) -> c_int;
+    fn __real_chdir(path: *const c_char) -> c_int;
+    fn __real_fchdir(fd: c_int) -> c_int;
+    fn __real_getcwd(buf: *mut c_char, size: size_t) -> *mut c_char;
+    fn __real_getwd(buf: *mut c_char) -> *mut c_char;
+    fn __real_get_current_dir_name() -> *mut c_char;
 }
 
 #[no_mangle]
@@ -767,7 +793,7 @@ pub unsafe extern fn __wrap_openat(dirfd: c_int, pathname: *const c_char, flags:
         false
     } else {
         let prefixpath = match dirfd {
-            AT_FDCWD => env::current_dir().unwrap(),
+            AT_FDCWD => FS().actual_cwd_path(),
             dfd => PathBuf::from(FS().get_fd_path(dfd)),
         };
         let path = prefixpath.join(path);
@@ -922,4 +948,60 @@ pub unsafe extern fn __wrap___fxstat(ver: c_int, fd: c_int, buf: *mut libc::stat
 #[no_mangle]
 pub unsafe extern fn __wrap___fxstat64(ver: c_int, fd: c_int, buf: *mut libc::stat) -> c_int {
     __wrap___fxstat(ver, fd, buf)
+}
+
+#[no_mangle]
+pub unsafe extern fn __wrap_chdir(path: *const c_char) -> c_int {
+    let str_path = str::from_utf8(CStr::from_ptr(path).to_bytes()).unwrap();
+    if INIT() && FS().exists(str_path) {
+        FS().set_cwd(str_path);
+        return 0
+    }
+    if INIT() { FS().unset_cwd(); }
+    __real_chdir(path)
+}
+#[no_mangle]
+pub unsafe extern fn __wrap_fchdir(fd: c_int) -> c_int {
+    if INIT() && FS().is_fd(fd) {
+        let str_path = FS().get_fd_path(fd);
+        FS().set_cwd(str_path);
+        return 0
+    }
+    if INIT() { FS().unset_cwd(); }
+    __real_fchdir(fd)
+}
+#[no_mangle]
+pub unsafe extern fn __wrap_getcwd(buf: *mut c_char, size: size_t) -> *mut c_char {
+    if INIT() && FS().has_cwd() {
+        if buf == ptr::null_mut() {
+            panic!("getcwd: null");
+        }
+        let size = size as usize;
+        let reldir_str = FS().get_cwd().unwrap();
+        let mut dir = PathBuf::from(WORKDIR);
+        if reldir_str != "" {
+            dir.push(reldir_str);
+        }
+        let dir_str = dir.to_str().unwrap();
+        if dir_str.len() > size {
+            panic!("getcwd: too big")
+        }
+        ptr::copy_nonoverlapping(dir_str.as_ptr(), buf as *mut libc::c_uchar, size);
+        return buf
+    }
+    __real_getcwd(buf, size)
+}
+#[no_mangle]
+pub unsafe extern fn __wrap_getwd(buf: *mut c_char) -> *mut c_char {
+    if INIT() && FS().has_cwd() {
+        panic!("getcwd")
+    }
+    __real_getwd(buf)
+}
+#[no_mangle]
+pub unsafe extern fn __wrap_get_current_dir_name() -> *mut c_char {
+    if INIT() && FS().has_cwd() {
+        panic!("get_current_dir_name")
+    }
+    __real_get_current_dir_name()
 }
