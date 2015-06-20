@@ -252,7 +252,7 @@ impl FileState {
             Some(pathstr) => PathBuf::from(pathstr),
             None => {
                 // cannot use env::current_dir().unwrap() because deadlock
-                let cwd_ptr = unsafe { __real_get_current_dir_name() };
+                let cwd_ptr = unsafe { __real_getcwd(ptr::null_mut(), 0) };
                 let cwd_cstr = unsafe { CStr::from_ptr(cwd_ptr) };
                 let pb = PathBuf::from(cwd_cstr.to_str().unwrap());
                 unsafe { libc::free(cwd_ptr as *mut c_void) };
