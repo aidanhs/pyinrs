@@ -1,11 +1,20 @@
-export PKG_CONFIG_PATH=$(shell pwd)/cpython/dist/lib/pkgconfig
+PCFG = export PKG_CONFIG_PATH=$(shell pwd)/cpython/dist/lib/pkgconfig
+MUSL_PCFG = export PKG_CONFIG_PATH=$(shell pwd)/cpython_musl/dist/lib/pkgconfig
 export PKG_CONFIG_ALL_STATIC=1
+# Having musl libc here would break build scripts
+export LIBRARY_PATH=
+# Musl is considered cross compiling
+export PKG_CONFIG_ALLOW_CROSS=1
 
 default:
 	@echo "Choose one of 'prep', 'static', 'dynamic', 'clean'"
 
 OPT ?= 0
 MODE ?= wrap
+
+checkmusl:
+	@[ -f "$$(which musl-gcc)" ] || \
+		(echo "Please add musl-gcc to your path" && exit 1)
 
 CARGO_ARGS =
 FEAT = --features "$(MODE)"
@@ -39,6 +48,25 @@ endif
 checkmode:
 	[ "$(MODE)" = dump -o "$(MODE)" = wrap ]
 
+prepmusl: checkmusl
+	cd cpython_musl/Modules/zlib && \
+		CC=musl-gcc CFLAGS="-fPIC" ./configure && \
+		make libz.a
+	
+	cd cpython_musl && \
+		./configure CC=musl-gcc LDFLAGS=-static --prefix=$$(pwd)/dist --disable-shared && \
+		sed -i 's/^#define \(HAVE_GETC_UNLOCKED\).*/#undef \1/' pyconfig.h && \
+		sed -i 's/^#\(array\|cmath\|math\|_struct\|time\|operator\|_random\|_collections\|_heapq\|itertools\|_functools\|datetime\|unicodedata\|_io\|fcntl\|select\|_socket\|termios\|resource\|_md5\|_sha\|_sha256\|_sha512\|binascii\|cStringIO\|cPickle\) /\1 /' Modules/Setup && \
+		sed -i 's|^#zlib.*$$|zlib zlibmodule.c -I./Modules/zlib -L./Modules/zlib -lz|' Modules/Setup && \
+		make OPT="-fPIC -O2" && \
+		make install
+	
+	rm -f libpython2.7.zip
+	cd cpython_musl/dist/lib/python2.7 && \
+		LIBFILES=$$(find . '(' -regex './\(test\|idlelib\|lib2to3\|unittest\)' -o -regex '.*/tests*/.*' ')' -a -prune -o -name '*.pyo' -print) && \
+		for f in $$LIBFILES; do zip $$OLDPWD/libpython2.7.zip $$f; done
+	cd -
+
 prep:
 	cd cpython/Modules/zlib && \
 		CFLAGS="-fPIC" ./configure && \
@@ -63,10 +91,10 @@ clean:
 
 prebuild:
 	cargo fetch
-	rm -f target/*/pyinrs
+	rm -f target/**/pyinrs
 
 dynamic: checkmode prebuild
-	CMD=$$(cargo rustc $(CARGO_ARGS) $(FEAT) --bin pyinrs -- $(RUSTC_ARGS) --emit obj -Z print-link-args | \
+	CMD=$$($(PCFG) && cargo rustc $(CARGO_ARGS) $(FEAT) --bin pyinrs -- $(RUSTC_ARGS) --emit obj -Z print-link-args | \
 		tail -n 1 | \
 		tr ' ' '\n' | \
 		$(WRAP_CMD) | \
@@ -74,13 +102,22 @@ dynamic: checkmode prebuild
 		echo $$CMD && eval "$$CMD"
 
 static: checkmode prebuild
-	CMD=$$(cargo rustc $(CARGO_ARGS) $(FEAT) --bin pyinrs -- $(RUSTC_ARGS) --emit obj -Z print-link-args | \
+	CMD=$$($(PCFG) && cargo rustc $(CARGO_ARGS) $(FEAT) --bin pyinrs -- $(RUSTC_ARGS) --emit obj -Z print-link-args | \
 		tail -n 1 | \
 		sed 's/"-l" "python2\.7" //g' | \
 		tr ' ' '\n' | \
 		grep -v '"\(-pie\|-Wl,.*-whole-archive\|-Wl,-B.*\)"' | \
 		sed 's/gcc_s"/gcc_eh"/' | \
 		sed 's/"cc"/"cc" "-static"/' | \
+		$(WRAP_CMD) | \
+		tr '\n' ' ') && \
+		echo $$CMD && eval "$$CMD"
+
+musl: checkmode prebuild checkmusl
+	CMD=$$($(MUSL_PCFG) && cargo rustc $(CARGO_ARGS) $(FEAT) --bin pyinrs --target x86_64-unknown-linux-musl -- $(RUSTC_ARGS) --emit obj -Z print-link-args | \
+		tail -n 1 | \
+		sed 's/"-l" "python2\.7" //g' | \
+		tr ' ' '\n' | \
 		$(WRAP_CMD) | \
 		tr '\n' ' ') && \
 		echo $$CMD && eval "$$CMD"

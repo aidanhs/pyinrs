@@ -1,3 +1,6 @@
 [submodule "cpython"]
 	path = cpython
 	url = https://github.com/python/cpython.git
+[submodule "cpython_musl"]
+	path = cpython_musl
+	url = https://github.com/python/cpython.git
