@@ -1,3 +1,9 @@
+https://bbs.archlinux.org/viewtopic.php?id=159391
+http://gadgetweb.de/linux/40-how-to-hijacking-the-syscall-table-on
+https://sourceware.org/glibc/wiki/Tips_and_Tricks/Providing_your_own_version_of_FOO
+http://yarchive.net/comp/linux/ptrace_self_attach.html
+https://mikecvet.wordpress.com/2010/08/14/ptrace-tutorial/
+
 Totally embedded python, including the stdlib.
 Static build requires nothing but a writable /tmp (not even glibc).
 Dynamic build is requires an appropriate glibc and supporting libraries - no need for Python installed.
