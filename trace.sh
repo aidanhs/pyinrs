@@ -1,0 +1,1 @@
+ltrace -f -e -pthread_mutex_lock-pthread_mutex_unlock-pthread_mutexattr_init-pthread_mutexattr_settype-pthread_mutex_init-pthread_mutexattr_destroy-memset-memcpy-memcmp-strlen-malloc-free-realloc-strncpy-strcmp-__ctype_b_loc-strchr-strstr-strcpy-memchr-__rawmemchr-@libpthread.so.0 ./debug/pyinrs >../out 2>&1

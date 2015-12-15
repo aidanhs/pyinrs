@@ -30,12 +30,26 @@ fn main() {
 
     let pyhome_str = "";
     let pyhome_cstr = CString::new(pyhome_str.as_bytes()).unwrap();
-    let cmd_str = "
-import sys, base64
-print base64.b64decode('SGVsbG8sIHB5dGhvbiE=')
-print sys.path
-print sys.argv
-";
+    let cmd_str = format!("
+import sys
+workdir = '{}'
+#import socket
+#import _socket
+#print socket.gethostname()
+#print _socket.gethostname()
+#import wave
+#import base64
+#sys.exit(1)
+sys.path.insert(0, workdir + '/dep')
+sys.path.insert(0, workdir) # shutit uses sys.path[0] as file location
+import shutit_util
+shutit_util._default_cnf = shutit_util._default_cnf.replace(
+    'shutit_module_path:',
+    'shutit_module_path:' + workdir + '/library:'
+) # such a hack
+import shutit_main
+shutit_main.main()
+", *WORKDIR);
     let cmd_cstr = CString::new(cmd_str.as_bytes()).unwrap();
 
     let mut cstr_args: Vec<CString> = vec![];
